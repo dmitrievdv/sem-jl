@@ -1,4 +1,5 @@
 using Word2Vec
+using Printf
 
 function loadcleanword2vec()
     wv = wordvectors("GoogleNews-vectors-negative300.bin", Float32, kind = :binary, skip=true)
@@ -53,7 +54,7 @@ function wordscore(wv :: WordVectors, word; n = 10)
     return score/sum_sim
 end
 
-function semantlegeometricguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_rare = 1.0)
+function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_rare = 1.0)
     best_indices = sortperm(similarities)
     n_guesses = length(guesses)
     start_guess = if length(guesses) > n
@@ -76,42 +77,52 @@ function semantlegeometricguess(wv, guesses, similarities; n = 10, rnd_prob = 0.
     else
         from_best_word = ""
         from_worst_word = ""
-        max_lg_mean_sim = -2.0
-        min_lg_mean_sim = 0.0
+        max_mean_sim = -1.0
+        min_mean_sim = 1.0
         for w in wv.vocab
             if w in guesses
                 continue
             end
-            lg_mean_sim = 0.0
+            mean_sim = 0.0
             for i in start_guess:n_guesses
                 ind = best_indices[i]
                 g = guesses[ind]
                 s = similarities[ind]
                 sim = abs(similarity(wv, w, g))
-                lg_mean_sim += log(sim)*s/sum_sim_best
+                mean_sim += sim*s/sum_sim_best
             end
-            if lg_mean_sim > max_lg_mean_sim
-                max_lg_mean_sim = lg_mean_sim
+            if mean_sim > max_mean_sim
+                max_mean_sim = mean_sim
                 from_best_word = w
             end
-            lg_mean_sim = 0.0
+            mean_sim = 0.0
             for i in 1:n_counts
                 ind = best_indices[i]
                 g = guesses[ind]
                 s = similarities[ind]
                 sim = abs(similarity(wv, w, g))
-                lg_mean_sim += log(sim)*(1-abs(s))/sum_sim_worst
+                mean_sim += sim*(1-abs(s))/sum_sim_worst
             end
-            if lg_mean_sim < min_lg_mean_sim
-                min_lg_mean_sim = lg_mean_sim
+            if mean_sim < min_mean_sim
+                min_mean_sim = mean_sim
                 from_worst_word = w
             end
         end
         if rnd < rnd_prob + (1-rnd_prob)*(1 - sum_sim_best/n_counts)/worst_rare
-            println("worst: $from_worst_word")
+            print("worst: $from_worst_word ")
+            for j=1:n_counts
+                i = best_indices[j]
+                @printf(" (%s %.2f)", guesses[i], similarities[i])
+            end
+            println("")
             return from_worst_word
         else
-            println("best: $from_best_word")
+            print("best: $from_best_word")
+            for j=start_guess:n_guesses
+                i = best_indices[j]
+                @printf(" (%s %.2f)", guesses[i], similarities[i])
+            end
+            println("")
             return from_best_word
         end
     end
@@ -122,7 +133,7 @@ function semantlegame(wv :: WordVectors, word :: AbstractString; rnd_prob = 0.3,
     sims = zeros(5)
     for i = 1:5
         w = guesses[i]
-        s = similarity(wv, w, word)
+        s = abs(similarity(wv, w, word))
         sims[i] = s
     end
     if word in guesses
@@ -133,11 +144,19 @@ function semantlegame(wv :: WordVectors, word :: AbstractString; rnd_prob = 0.3,
     while guesses[end] != word
         n_gueses += 1
         print("Guess #$n_gueses from ")
-        guess = semantlegeometricguess(wv, guesses, sims, rnd_prob = rnd_prob, worst_rare = worst_rare)
+        guess = semantleguess(wv, guesses, sims, rnd_prob = rnd_prob, worst_rare = worst_rare)
         s = abs(similarity(wv, guess, word))
         println("  similarity score $(100*s)")
         push!(guesses, guess); push!(sims, s)
     end
     println("Found after $n_gueses guesses!")
     return guesses, sims
+end
+
+function printbest(n, guesses, sims)
+    best_ind = reverse(sortperm(sims))
+    for j=1:n
+        i = best_ind[j]
+        @printf("Guess #%3i %13s %.2f\n", i, guesses[i], 100*sims[i])
+    end
 end
