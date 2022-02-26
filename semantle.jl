@@ -64,8 +64,8 @@ function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_
     end
     rnd = rand()
     n_counts = min(n, n_guesses)
-    sum_sim_best = sum(abs.(similarities[best_indices[start_guess:n_guesses]]))
-    sum_sim_worst = sum(1 .- abs.(similarities[best_indices[1:n_counts]]))
+    sum_sim_best = sum(similarities[best_indices[start_guess:n_guesses]])
+    sum_sim_worst = sum(1 .- similarities[best_indices[1:n_counts]])
     
     if rnd < rnd_prob
         w = guesses[1]
@@ -88,7 +88,7 @@ function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_
                 ind = best_indices[i]
                 g = guesses[ind]
                 s = similarities[ind]
-                sim = abs(similarity(wv, w, g))
+                sim = similarity(wv, w, g)
                 mean_sim += sim*s/sum_sim_best
             end
             if mean_sim > max_mean_sim
@@ -100,8 +100,8 @@ function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_
                 ind = best_indices[i]
                 g = guesses[ind]
                 s = similarities[ind]
-                sim = abs(similarity(wv, w, g))
-                mean_sim += sim*(1-abs(s))/sum_sim_worst
+                sim = similarity(wv, w, g)
+                mean_sim += sim*(1-s)/sum_sim_worst
             end
             if mean_sim < min_mean_sim
                 min_mean_sim = mean_sim
@@ -133,7 +133,7 @@ function semantlegame(wv :: WordVectors, word :: AbstractString; rnd_prob = 0.3,
     sims = zeros(5)
     for i = 1:5
         w = guesses[i]
-        s = abs(similarity(wv, w, word))
+        s = similarity(wv, w, word)
         sims[i] = s
     end
     if word in guesses
@@ -145,7 +145,7 @@ function semantlegame(wv :: WordVectors, word :: AbstractString; rnd_prob = 0.3,
         n_gueses += 1
         print("Guess #$n_gueses from ")
         guess = semantleguess(wv, guesses, sims, rnd_prob = rnd_prob, worst_rare = worst_rare)
-        s = abs(similarity(wv, guess, word))
+        s = similarity(wv, guess, word)
         println("  similarity score $(100*s)")
         push!(guesses, guess); push!(sims, s)
     end
@@ -155,8 +155,35 @@ end
 
 function printbest(n, guesses, sims)
     best_ind = reverse(sortperm(sims))
+    @printf("Answer: %s. Found after %i guesses\n\n", guesses[end], length(guesses))
+    @printf("%13sBest guesses%13s %17sWorst guesses%13s\n", "", "", "", "")
     for j=1:n
-        i = best_ind[j]
-        @printf("Guess #%3i %13s %.2f\n", i, guesses[i], 100*sims[i])
+        i_best = best_ind[j+1]; i_worst = best_ind[end-j+1] 
+        @printf("Guess #%3i %20s %6.2f     ", i_best, guesses[i_best], 100*sims[i_best])
+        @printf("Guess #%3i %20s %6.2f\n", i_worst, guesses[i_worst], 100*sims[i_worst])
+    end
+end
+
+function printbest(n, wv, word :: AbstractString, guesses)
+    n_g = length(guesses)
+    sims = zeros(n_g)
+    for i = 1:n_g   
+        sims[i] = similarity(wv, word, guesses[i])
+    end
+    best_ind = reverse(sortperm(sims))
+    @printf("Guesses relative to %s. Answer %s found after found after %i guesses\n\n", word, guesses[end], length(guesses))
+    @printf("%13sBest guesses%13s %17sWorst guesses%13s\n", "", "", "", "")
+    for j=1:n
+        i_best = best_ind[j]; i_worst = best_ind[end-j+1] 
+        @printf("Guess #%3i %20s %6.2f     ", i_best, guesses[i_best], 100*sims[i_best])
+        @printf("Guess #%3i %20s %6.2f\n", i_worst, guesses[i_worst], 100*sims[i_worst])
+    end
+end
+
+function printsimilar(wv :: WordVectors, word :: AbstractString; n = 10)
+    words = cosine_similar_words(wv, word, n)
+    for i = 1:n
+        s = similarity(wv, word, words[i])
+        @printf("%20s %6.2f\n", words[i], 100*s)
     end
 end
