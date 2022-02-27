@@ -1,12 +1,62 @@
 using Word2Vec
 using Printf
 
-function loadcleanword2vec()
-    wv = wordvectors("GoogleNews-vectors-negative300.bin", Float32, kind = :binary, skip=true)
+function saveword2vec(wv :: WordVectors, filename; type = :binary)
+    if type == :binary
+        saveword2vecbinary(wv, filename)
+    end
+end
+
+function saveword2vecbinary(wv :: WordVectors, filename)
+    out = open(filename*".bin", "w")
+    vector_size, vocab_size = size(wv.vectors)
+    write(out, vocab_size)
+    write(out, vector_size)
+    for i = 1:vocab_size
+        write(out, wv.vocab[i]*" ")
+        for j = 1:vector_size
+            write(out, Float32(wv.vectors[j,i]))
+        end
+    end
+    close(out)
+end
+
+function loadword2vecbinary(filename)
+    open(filename*".bin", "r") do f
+        vocab_size, vector_size = reinterpret(Int, read(f, sizeof(Int)*2))
+        vocab = Vector{String}(undef, vocab_size)
+        vectors = zeros(vector_size, vocab_size)
+        for i = 1:vocab_size
+            vocab[i] = strip(readuntil(f, " "))
+            vectors[:,i] = reinterpret(Float32, read(f, sizeof(Float32)*vector_size))
+        end
+        Word2Vec.WordVectors(vocab, vectors)
+    end
+end
+
+loadword2vec() = loadword2vecbinary("cleaned")
+
+function loadgoogleword2vec( ; w2vdata = "GoogleNews-vectors-negative300.bin")
+    wv = wordvectors(w2vdata, Float32, kind = :binary, skip=true)
     n_words = length(wv.vocab)
     real_words_indices = Int[]
     for ind in 1:n_words
         if occursin(r"^[a-z]+$", wv.vocab[ind])
+            push!(real_words_indices, ind)
+        end
+    end
+    println(length(real_words_indices))
+    vocab = wv.vocab[real_words_indices]
+    vectors = wv.vectors[:, real_words_indices]
+    return Word2Vec.WordVectors(vocab, vectors)
+end
+
+function cleanword2vec(wv, word_list)
+    n_words = length(wv.vocab)
+    real_words_indices = Int[]
+    real_words = readlines(word_list)
+    for ind in 1:n_words
+        if wv.vocab[ind] in real_words
             push!(real_words_indices, ind)
         end
     end
@@ -156,10 +206,14 @@ end
 function printbest(n, guesses, sims)
     best_ind = reverse(sortperm(sims))
     @printf("Answer: %s. Found after %i guesses\n\n", guesses[end], length(guesses))
-    @printf("%13sBest guesses%13s %17sWorst guesses%13s\n", "", "", "", "")
+    @printf("%13sBest guesses\n", "")
     for j=1:n
-        i_best = best_ind[j+1]; i_worst = best_ind[end-j+1] 
-        @printf("Guess #%3i %20s %6.2f     ", i_best, guesses[i_best], 100*sims[i_best])
+        i_best = best_ind[j]; i_worst = best_ind[end-j+1] 
+        @printf("Guess #%3i %20s %6.2f\n", i_best, guesses[i_best], 100*sims[i_best])
+    end
+    @printf("\n\n%13sWorst guesses\n", "")
+    for j=1:n
+        i_best = best_ind[j]; i_worst = best_ind[end-j+1] 
         @printf("Guess #%3i %20s %6.2f\n", i_worst, guesses[i_worst], 100*sims[i_worst])
     end
 end
@@ -172,10 +226,14 @@ function printbest(n, wv, word :: AbstractString, guesses)
     end
     best_ind = reverse(sortperm(sims))
     @printf("Guesses relative to %s. Answer %s found after found after %i guesses\n\n", word, guesses[end], length(guesses))
-    @printf("%13sBest guesses%13s %17sWorst guesses%13s\n", "", "", "", "")
+    @printf("%13sBest guesses\n", "")
     for j=1:n
         i_best = best_ind[j]; i_worst = best_ind[end-j+1] 
-        @printf("Guess #%3i %20s %6.2f     ", i_best, guesses[i_best], 100*sims[i_best])
+        @printf("Guess #%3i %20s %6.2f\n", i_best, guesses[i_best], 100*sims[i_best])
+    end
+    @printf("\n\n%13sWorst guesses\n", "")
+    for j=1:n
+        i_best = best_ind[j]; i_worst = best_ind[end-j+1] 
         @printf("Guess #%3i %20s %6.2f\n", i_worst, guesses[i_worst], 100*sims[i_worst])
     end
 end
