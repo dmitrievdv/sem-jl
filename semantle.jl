@@ -105,18 +105,18 @@ function wordscore(wv :: WordVectors, word; n = 10)
 end
 
 function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_rare = 1.0)
-    best_indices = sortperm(similarities)
     n_guesses = length(guesses)
-    start_guess = if length(guesses) > n
-        n_guesses - n + 1
-    else
-        1
-    end
+    n_counts = min(n, n_guesses)
+    worst_indices = sortperm(similarities)
+    best_indices = reverse(worst_indices)
+   
     rnd = rand()
     n_counts = min(n, n_guesses)
-    sum_sim_best = sum(similarities[best_indices[start_guess:n_guesses]])
-    sum_sim_worst = sum(1 .- similarities[best_indices[1:n_counts]])
+    sum_sim_best = sum(similarities[best_indices[1:n_counts]])
+    sum_sim_worst = sum(1 .- similarities[worst_indices[1:n_counts]])
     
+    
+
     if rnd < rnd_prob
         w = guesses[1]
         while w in guesses
@@ -134,7 +134,7 @@ function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_
                 continue
             end
             mean_sim = 0.0
-            for i in start_guess:n_guesses
+            for i in 1:n_counts
                 ind = best_indices[i]
                 g = guesses[ind]
                 s = similarities[ind]
@@ -147,7 +147,7 @@ function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_
             end
             mean_sim = 0.0
             for i in 1:n_counts
-                ind = best_indices[i]
+                ind = worst_indices[i]
                 g = guesses[ind]
                 s = similarities[ind]
                 sim = similarity(wv, w, g)
@@ -161,14 +161,14 @@ function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_
         if rnd < rnd_prob + (1-rnd_prob)*(1 - sum_sim_best/n_counts)/worst_rare
             print("worst: $from_worst_word ")
             for j=1:n_counts
-                i = best_indices[j]
+                i = worst_indices[j]
                 @printf(" (%s %.2f)", guesses[i], similarities[i])
             end
             println("")
             return from_worst_word
         else
             print("best: $from_best_word")
-            for j=start_guess:n_guesses
+            for j=1:n_counts
                 i = best_indices[j]
                 @printf(" (%s %.2f)", guesses[i], similarities[i])
             end
@@ -176,6 +176,90 @@ function semantleguess(wv, guesses, similarities; n = 10, rnd_prob = 0.3, worst_
             return from_best_word
         end
     end
+end
+
+function cosinetovec(wv::WordVectors, vector, n=10)
+    metrics = wv.vectors'*vector
+    topn_positions = sortperm(metrics[:], rev = true)[1:n]
+    topn_metrics = metrics[topn_positions]
+    return topn_positions, topn_metrics
+end
+
+
+function semantlemathgame(wv :: WordVectors, word :: AbstractString; n_guesses = 10, closing = 1e3)
+    guesses = rand(wv.vocab, n_guesses)
+    vector_size = size(wv.vectors)[1]
+    sims = zeros(n_guesses)
+    last_vectors = zeros(vector_size, n_guesses)
+    for i = 1:n_guesses
+        w = guesses[i]
+        s = similarity(wv, w, word)
+        sims[i] = s
+        last_vectors[:, i] = get_vector(wv, w)
+    end
+    best_indices = reverse(sortperm(sims))
+    best_guess = guesses[best_indices[1]]
+    if best_guess == word
+        println("Randomly guessed!")
+    end
+    guess = best_guess
+    vocab_size = length(wv.vocab)
+    direction = zeros(vector_size)
+    last_guesses = deepcopy(guesses)
+    last_sims = deepcopy(sims)
+    prediction_guesses = deepcopy(guesses)
+    prediction_sims = deepcopy(sims)
+    n_tries = n_guesses
+    print(last_guesses[best_indices[1]])
+    while !(word in last_guesses)
+        direction .= 0.0
+        sum_sim = sum(last_sims)
+        mean_sim = 0.0
+        best_i = best_indices[1]
+        for j = 2:n_guesses
+            i = best_indices[j]
+            direction += (1 - last_sims[i])*(last_vectors[:, best_i] - last_vectors[:, i])/(9 - sum_sim + last_sims[best_i])
+            mean_sim += (1 - last_sims[i])*last_sims[i]/(9 - sum_sim + last_sims[best_i])
+        end
+        direction_norm = sqrt(sum(direction .^ 2))
+
+        Δsim = last_sims[best_i] - mean_sim
+        # println("$(1- last_sims[best_i]) $Δsim $direction_norm")
+        # println(direction)
+
+        prediction_vector = last_vectors[:, best_i] + direction*(1- last_sims[best_i])/Δsim#*closing
+        indx, metr = cosinetovec(wv, prediction_vector, length(guesses))
+        j = 0
+        for i = 1:length(guesses)
+            w = wv.vocab[indx[i]]
+            if w in guesses
+                continue
+            end
+            n_tries += 1
+            j += 1
+            push!(guesses, w)
+            sim = similarity(wv, word, w)
+            push!(sims, sim)
+            if w == word
+                println("\nFound after $n_tries guesses!")
+                return guesses, sims
+            end 
+            last_guesses[j] = w
+            last_sims[j] = sim
+            last_vectors[:, j] = get_vector(wv, w)
+            if j == n_guesses
+                break
+            end
+        end
+        # last_guesses .= wv.vocab[indx]
+        print(" -> $(last_guesses[1])")
+        best_indices = sortperm(last_sims, rev = true)
+        # append!(guesses, last_guesses)
+        # append!(sims, last_sims)
+        # readline()
+    end
+    println("")
+    return guesses, sims
 end
 
 function semantlegame(wv :: WordVectors, word :: AbstractString; rnd_prob = 0.3, worst_rare = 1.0)
