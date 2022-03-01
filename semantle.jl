@@ -185,9 +185,8 @@ function cosinetovec(wv::WordVectors, vector, n=10)
     return topn_positions, topn_metrics
 end
 
-
-function semantlemathgame(wv :: WordVectors, word :: AbstractString; n_guesses = 10, closing = 1e3)
-    guesses = rand(wv.vocab, n_guesses)
+function semantlemathgame(wv :: WordVectors, word :: AbstractString, start_guesses; n_guesses = 10, closing = 1e3)
+    guesses = deepcopy(start_guesses[1:n_guesses])
     vector_size = size(wv.vectors)[1]
     sims = zeros(n_guesses)
     last_vectors = zeros(vector_size, n_guesses)
@@ -260,6 +259,16 @@ function semantlemathgame(wv :: WordVectors, word :: AbstractString; n_guesses =
     end
     println("")
     return guesses, sims
+end
+
+function semantlemathgame(wv :: WordVectors, word :: AbstractString, start_guess :: AbstractString; n_guesses = 10, closing = 1e3)
+    start_guesses = cosine_similar_words(wv, start_guess, n_guesses)
+    semantlemathgame(wv, word, start_guesses, n_guesses = n_guesses, closing = closing)
+end
+
+function semantlemathgame(wv :: WordVectors, word :: AbstractString; n_guesses = 10, closing = 1e3)
+    start_guesses = rand(wv.vocab, n_guesses)
+    semantlemathgame(wv, word, start_guesses, n_guesses = n_guesses, closing = closing)
 end
 
 function semantlegame(wv :: WordVectors, word :: AbstractString; rnd_prob = 0.3, worst_rare = 1.0)
