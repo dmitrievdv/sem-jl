@@ -45,7 +45,7 @@ function loadword2vecrussian(filename)
             vector = reinterpret(Float32, read(f, sizeof(Float32)*vector_size))
             vocab[i] = word
             vectors[:,i] = vector/√(sum(vector .^ 2))
-            if !occursin(r"[a-zA-Z]", word) & !(':' in word)
+            if !occursin(r"[a-zA-Z0-9.,:А-Я]", word)
                 push!(indeces, i)
             end
         end
