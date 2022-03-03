@@ -39,12 +39,17 @@ function loadword2vecrussian(filename)
         vocab_size, vector_size = parse.(Int, split(readline(f)))
         vocab = Vector{String}(undef, vocab_size)
         vectors = zeros(vector_size, vocab_size)
+        indeces = Int[]
         for i = 1:vocab_size
-            vocab[i] = split(strip(readuntil(f, " ")), '_')[1]
+            word = split(strip(readuntil(f, " ")), '_')[1]
             vector = reinterpret(Float32, read(f, sizeof(Float32)*vector_size))
+            vocab[i] = word
             vectors[:,i] = vector/√(sum(vector .^ 2))
+            if !occursin(r"[a-zA-Z]", word) & !(':' in word)
+                push!(indeces, i)
+            end
         end
-        Word2Vec.WordVectors(vocab, vectors)
+        Word2Vec.WordVectors(vocab[indeces], vectors[:, indeces])
     end
 end
 
