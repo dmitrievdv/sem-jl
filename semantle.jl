@@ -34,6 +34,22 @@ function loadword2vecbinary(filename)
     end
 end
 
+function loadword2vecrussian(filename)
+    open(filename*".bin", "r") do f
+        vocab_size, vector_size = parse.(Int, split(readline(f)))
+        vocab = Vector{String}(undef, vocab_size)
+        vectors = zeros(vector_size, vocab_size)
+        for i = 1:vocab_size
+            vocab[i] = split(strip(readuntil(f, " ")), '_')[1]
+            vector = reinterpret(Float32, read(f, sizeof(Float32)*vector_size))
+            vectors[:,i] = vector/√(sum(vector .^ 2))
+        end
+        Word2Vec.WordVectors(vocab, vectors)
+    end
+end
+
+
+
 loadword2vec() = loadword2vecbinary("cleaned")
 
 function loadgoogleword2vec( ; w2vdata = "GoogleNews-vectors-negative300.bin")
