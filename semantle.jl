@@ -21,6 +21,72 @@ function saveword2vecbinary(wv :: WordVectors, filename)
     close(out)
 end
 
+function printwords(wv :: WordVectors, n = 5000)
+    open("secretWords.js", "w") do f
+        println(f, "secretWords = [")
+        words = rand(wv.vocab, n)
+        w = words[1]
+        print(f,"\"$w\"")
+        for w in words[2:end]
+            print(f,",\n\"$w\"")
+        end
+        println(f, "\n]")
+    end
+end
+
+function shufflesecret()
+    words = open("secretWords.js", "r") do f
+        lines = readlines(f)
+        String.(getfield.(match.(r"[а-я]+", lines[2:end-1]),:match))
+    end
+    shuffle!(words)
+    open("secretWords.js", "w") do f
+        println(f, "secretWords = [")
+        w = words[1]
+        print(f,"\"$w\"")
+        for w in words[2:end]
+            print(f,",\n\"$w\"")
+        end
+        println(f, "\n]")
+    end
+end
+
+function cleansecret(wv :: WordVectors)
+    words = open("secretWords.js", "r") do f
+        lines = readlines(f)
+        String.(getfield.(match.(r"[а-я]+", lines[2:end-1]),:match))
+    end
+    checked_words = []
+    for w in words
+        println(w)
+        if w in wv.vocab
+            push!(checked_words, w)
+        end
+    end
+    open("secretWords.js", "w") do f
+        println(f, "secretWords = [")
+        w = checked_words[1]
+        print(f,"\"$w\"")
+        for w in checked_words[2:end]
+            print(f,",\n\"$w\"")
+        end
+        println(f, "\n]")
+    end
+end
+
+function saveword2vecformat(wv :: WordVectors, filename)
+    out = open(filename*".bin", "w")
+    vector_size, vocab_size = size(wv.vectors)
+    write(out, "$vocab_size $vector_size\n")
+    for i = 1:vocab_size
+        write(out, wv.vocab[i]*" ")
+        for j = 1:vector_size
+            write(out, Float32(wv.vectors[j,i]))
+        end
+    end
+    close(out)
+end
+
 function loadword2vecbinary(filename)
     open(filename*".bin", "r") do f
         vocab_size, vector_size = reinterpret(Int, read(f, sizeof(Int)*2))
@@ -45,7 +111,7 @@ function loadword2vecrussian(filename)
             vector = reinterpret(Float32, read(f, sizeof(Float32)*vector_size))
             vocab[i] = word
             vectors[:,i] = vector/√(sum(vector .^ 2))
-            if !occursin(r"[a-zA-Z0-9.,:А-Я]", word)
+            if occursin(r"^[а-я\-]+$", word)
                 push!(indeces, i)
             end
         end
